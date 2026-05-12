@@ -430,6 +430,7 @@ async def _repl_main(
     finally:
         if alert_listener_handle is not None:
             alert_listener_handle.stop()
+            _alert_inbox.set_current_inbox(None)
 
 
 def run_repl(initial_input: str | None = None, config: ReplConfig | None = None) -> int:
