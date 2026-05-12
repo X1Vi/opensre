@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from collections import deque
 from threading import Thread
 from typing import Any
 from urllib.parse import urlparse
