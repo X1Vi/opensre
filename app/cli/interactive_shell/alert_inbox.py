@@ -156,17 +156,15 @@ def start_alert_listener(
                     self._respond(400, {"error": str(exc)})
                     return
 
-                inbox.put(alert)
+                accepted = inbox.put(alert)
 
-                dropped = inbox.dropped
-                if dropped > 0:
-                    status = 503
+                if not accepted:
                     self._respond(
-                        status,
+                        503,
                         {
                             "queued": False,
                             "queue_depth": inbox.qsize,
-                            "dropped": dropped,
+                            "dropped": inbox.dropped,
                             "error": "inbox full, alert dropped",
                         },
                     )
