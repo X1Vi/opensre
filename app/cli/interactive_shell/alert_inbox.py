@@ -37,10 +37,13 @@ class AlertInbox:
         self._lock = threading.Lock()
 
     def put(self, alert: IncomingAlert) -> bool:
+        """Return True if queued without eviction, False if an old alert was dropped."""
         with self._lock:
             if self._queue.qsize() >= self._maxsize:
                 self._queue.get_nowait()
                 self._dropped += 1
+                self._queue.put_nowait(alert)
+                return False
             self._queue.put_nowait(alert)
         return True
 
