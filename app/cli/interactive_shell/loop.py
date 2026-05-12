@@ -48,6 +48,7 @@ from app.agents.sweep import run_startup_sweep
 from app.analytics.cli import capture_terminal_turn_summarized
 from app.analytics.events import Event
 from app.analytics.provider import get_analytics
+from app.cli.interactive_shell import alert_inbox as _alert_inbox
 from app.cli.interactive_shell import commands as _commands
 from app.cli.interactive_shell.chat import cli_agent as _cli_agent
 from app.cli.interactive_shell.chat import cli_help as _cli_help
@@ -403,11 +404,32 @@ async def _repl_main(
     if initial_input:
         return _run_initial_input(initial_input, session, hot_reloader)
 
-    # Pass the already-built ``pt_session`` so ``_run_interactive``
-    # doesn't allocate a second one. ``session.prompt_history_backend``
-    # is already wired above.
-    await _run_interactive(session, hot_reloader, pt_session=pt_session)
-    return 0
+    alert_listener_handle: _alert_inbox.AlertListenerHandle | None = None
+    if cfg.alert_listener_enabled:
+        inbox = _alert_inbox.AlertInbox()
+        alert_listener_handle = _alert_inbox.start_alert_listener(
+            inbox,
+            host=cfg.alert_listener_host,
+            port=cfg.alert_listener_port,
+            token=cfg.alert_listener_token,
+        )
+        _alert_inbox.set_current_inbox(inbox)
+        console = Console(
+            highlight=False,
+            force_terminal=True,
+            color_system="truecolor",
+            legacy_windows=False,
+        )
+        console.print(
+            f"[{DIM}]listening for alerts on http://{alert_listener_handle.bound_address}/alerts[/]"
+        )
+
+    try:
+        await _run_interactive(session, hot_reloader, pt_session=pt_session)
+        return 0
+    finally:
+        if alert_listener_handle is not None:
+            alert_listener_handle.stop()
 
 
 def run_repl(initial_input: str | None = None, config: ReplConfig | None = None) -> int:

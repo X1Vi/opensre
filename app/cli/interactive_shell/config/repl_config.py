@@ -76,6 +76,10 @@ class ReplConfig:
     enabled: bool = True
     layout: str = "classic"
     reload: bool = True
+    alert_listener_enabled: bool = False
+    alert_listener_host: str = "127.0.0.1"
+    alert_listener_port: int = 0
+    alert_listener_token: str | None = None
 
     @staticmethod
     def _coerce_bool(value: Any, *, default: bool) -> bool:
@@ -130,7 +134,41 @@ class ReplConfig:
         else:
             reload = cls._coerce_bool(file_conf.get("reload"), default=True)
 
-        return cls(enabled=enabled, layout=layout, reload=reload)
+        # --- alert_listener_enabled ---
+        if (env_val := os.getenv("OPENSRE_ALERT_LISTENER_ENABLED")) is not None:
+            alert_listener_enabled = cls._coerce_bool(env_val, default=False)
+        else:
+            alert_listener_enabled = cls._coerce_bool(
+                file_conf.get("alert_listener_enabled"), default=False
+            )
+
+        # --- alert_listener_host ---
+        if (env_val := os.getenv("OPENSRE_ALERT_LISTENER_HOST")) is not None:
+            alert_listener_host = env_val.strip()
+        else:
+            alert_listener_host = str(file_conf.get("alert_listener_host", "127.0.0.1"))
+
+        # --- alert_listener_port ---
+        if (env_val := os.getenv("OPENSRE_ALERT_LISTENER_PORT")) is not None:
+            alert_listener_port = int(env_val.strip())
+        else:
+            alert_listener_port = int(file_conf.get("alert_listener_port", 0))
+
+        # --- alert_listener_token ---
+        if (env_val := os.getenv("OPENSRE_ALERT_LISTENER_TOKEN")) is not None:
+            alert_listener_token = env_val.strip() or None
+        else:
+            alert_listener_token = file_conf.get("alert_listener_token")
+
+        return cls(
+            enabled=enabled,
+            layout=layout,
+            reload=reload,
+            alert_listener_enabled=alert_listener_enabled,
+            alert_listener_host=alert_listener_host,
+            alert_listener_port=alert_listener_port,
+            alert_listener_token=alert_listener_token,
+        )
 
     @classmethod
     def from_env(cls) -> ReplConfig:
