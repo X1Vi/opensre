@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any
 
 _VALID_LAYOUTS = ("classic", "pinned")
 _FALSE_VALUES = ("", "0", "false", "off", "no")
+
+log = logging.getLogger(__name__)
 
 # ── Release notes ─────────────────────────────────────────────────────────────
 # Shown in the "What's new" panel on startup. Update this each release with
