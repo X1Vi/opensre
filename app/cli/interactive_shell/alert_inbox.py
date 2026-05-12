@@ -48,10 +48,11 @@ class AlertInbox:
         return True
 
     def pop_nowait(self) -> IncomingAlert | None:
-        try:
-            return self._queue.popleft()
-        except IndexError:
-            return None
+        with self._lock:
+            try:
+                return self._queue.popleft()
+            except IndexError:
+                return None
 
     def iter_pending(self) -> list[IncomingAlert]:
         with self._lock:

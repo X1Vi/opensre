@@ -162,7 +162,14 @@ class ReplConfig:
                 )
                 alert_listener_port = 0
         else:
-            alert_listener_port = int(file_conf.get("alert_listener_port", 0))
+            try:
+                alert_listener_port = int(file_conf.get("alert_listener_port", 0))
+            except ValueError:
+                log.warning(
+                    "config.yml interactive.alert_listener_port=%r is not a valid port number; defaulting to 0 (random).",
+                    file_conf.get("alert_listener_port"),
+                )
+                alert_listener_port = 0
 
         # --- alert_listener_token ---
         if (env_val := os.getenv("OPENSRE_ALERT_LISTENER_TOKEN")) is not None:
