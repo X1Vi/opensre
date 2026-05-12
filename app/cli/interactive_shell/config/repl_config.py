@@ -150,7 +150,14 @@ class ReplConfig:
 
         # --- alert_listener_port ---
         if (env_val := os.getenv("OPENSRE_ALERT_LISTENER_PORT")) is not None:
-            alert_listener_port = int(env_val.strip())
+            try:
+                alert_listener_port = int(env_val.strip())
+            except ValueError:
+                log.warning(
+                    "OPENSRE_ALERT_LISTENER_PORT=%r is not a valid port number; defaulting to 0 (random).",
+                    env_val,
+                )
+                alert_listener_port = 0
         else:
             alert_listener_port = int(file_conf.get("alert_listener_port", 0))
 
