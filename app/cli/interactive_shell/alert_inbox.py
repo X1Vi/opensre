@@ -169,10 +169,10 @@ def start_alert_listener(
                     self._respond(
                         503,
                         {
-                            "queued": False,
+                            "queued": True,
                             "queue_depth": inbox.qsize,
                             "dropped": inbox.dropped,
-                            "error": "inbox full, alert dropped",
+                            "warning": "inbox full, oldest alert dropped",
                         },
                     )
                 else:

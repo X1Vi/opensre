@@ -152,11 +152,12 @@ class TestHttpListener:
         finally:
             handle.stop()
 
-    def test_overflow_returns_503(self, listener: AlertListenerHandle) -> None:
+    def test_overflow_returns_503_with_queued(self, listener: AlertListenerHandle) -> None:
         for i in range(3):
             _post("127.0.0.1", listener._bound_port, {"text": f"alert {i}"})
         status, body = _post("127.0.0.1", listener._bound_port, {"text": "overflow"})
         assert status == 503
+        assert body["queued"] is True
         assert body["dropped"] == 1
 
     def test_unknown_path_returns_404(self, listener: AlertListenerHandle) -> None:
