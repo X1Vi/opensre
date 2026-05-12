@@ -8,7 +8,7 @@ import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from queue import Empty, SimpleQueue
+from collections import deque
 from threading import Thread
 from typing import Any
 from urllib.parse import urlparse
@@ -31,7 +31,7 @@ class IncomingAlert(StrictConfigModel):
 
 class AlertInbox:
     def __init__(self, maxsize: int = _DEFAULT_MAX_INBOX) -> None:
-        self._queue: SimpleQueue[IncomingAlert] = SimpleQueue()
+        self._queue: deque[IncomingAlert] = deque()
         self._maxsize = maxsize
         self._dropped: int = 0
         self._lock = threading.Lock()
@@ -39,18 +39,18 @@ class AlertInbox:
     def put(self, alert: IncomingAlert) -> bool:
         """Return True if queued without eviction, False if an old alert was dropped."""
         with self._lock:
-            if self._queue.qsize() >= self._maxsize:
-                self._queue.get_nowait()
+            if len(self._queue) >= self._maxsize:
+                self._queue.popleft()
                 self._dropped += 1
-                self._queue.put_nowait(alert)
+                self._queue.append(alert)
                 return False
-            self._queue.put_nowait(alert)
+            self._queue.append(alert)
         return True
 
     def pop_nowait(self) -> IncomingAlert | None:
         try:
-            return self._queue.get_nowait()
-        except Empty:
+            return self._queue.popleft()
+        except IndexError:
             return None
 
     def iter_pending(self) -> list[IncomingAlert]:
@@ -58,14 +58,19 @@ class AlertInbox:
             items: list[IncomingAlert] = []
             while True:
                 try:
-                    items.append(self._queue.get_nowait())
-                except Empty:
+                    items.append(self._queue.popleft())
+                except IndexError:
                     break
             return items
 
+    def peek_last(self, n: int) -> list[IncomingAlert]:
+        with self._lock:
+            items = list(self._queue)
+            return items[-n:]
+
     @property
     def qsize(self) -> int:
-        return self._queue.qsize()
+        return len(self._queue)
 
     @property
     def dropped(self) -> int:

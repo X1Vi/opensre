@@ -24,8 +24,7 @@ def _cmd_alerts(_session: ReplSession, console: Console, _args: list[str]) -> bo
     table.add_row("queue depth", str(inbox.qsize))
     table.add_row("dropped", str(inbox.dropped))
 
-    pending = inbox.iter_pending()
-    for alert in pending[-5:]:
+    for alert in inbox.peek_last(5):
         table.add_row(f"[{DIM}]recent[/]", f"{alert.alert_name or 'untitled'} — {alert.text[:80]}")
 
     console.print(table)
