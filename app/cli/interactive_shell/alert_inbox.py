@@ -167,7 +167,7 @@ def start_alert_listener(
 
                 if not accepted:
                     self._respond(
-                        503,
+                        202,
                         {
                             "queued": True,
                             "queue_depth": inbox.qsize,
