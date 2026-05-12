@@ -175,7 +175,7 @@ class ReplConfig:
         if (env_val := os.getenv("OPENSRE_ALERT_LISTENER_TOKEN")) is not None:
             alert_listener_token = env_val.strip() or None
         else:
-            alert_listener_token = file_conf.get("alert_listener_token")
+            alert_listener_token = file_conf.get("alert_listener_token") or None
 
         return cls(
             enabled=enabled,

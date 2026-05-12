@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import threading
@@ -124,7 +125,7 @@ def start_alert_listener(
                 if token is None:
                     return True
                 auth = self.headers.get("Authorization", "")
-                if auth == f"Bearer {token}":
+                if hmac.compare_digest(auth, f"Bearer {token}"):
                     return True
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
