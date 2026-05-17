@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+from typing import Any
 
 import pytest
 
@@ -339,3 +340,171 @@ def test_unrelated_type_error_is_retried_and_wrapped(
         client.invoke(messages=[{"role": "user", "content": "hi"}])
 
     assert call_count == 3, "non-auth TypeError should be retried like a generic exception"
+
+
+@pytest.mark.parametrize(
+    "provider", ["codex", "opencode", "claude-code", "kimi", "cursor", "gemini-cli", "copilot"]
+)
+def test_get_agent_llm_returns_cli_backed_client_for_cli_providers(
+    provider: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services.agent_llm_client import (
+        CLIBackedAgentClient,
+        get_agent_llm,
+        reset_agent_client,
+    )
+
+    monkeypatch.setenv("LLM_PROVIDER", provider)
+    reset_agent_client()
+    client = get_agent_llm()
+    assert isinstance(client, CLIBackedAgentClient), (
+        f"Expected CLIBackedAgentClient for provider={provider!r}, got {type(client).__name__}"
+    )
+
+
+def test_cli_backed_agent_client_tool_call_parsing() -> None:
+    """CLIBackedAgentClient correctly parses a JSON tool_calls response."""
+    import types as _types
+
+    from app.services.agent_llm_client import CLIBackedAgentClient
+
+    fake_adapter = _types.SimpleNamespace(
+        name="codex",
+        binary_env_key="CODEX_BIN",
+        install_hint="npm i -g @openai/codex",
+        auth_hint="codex login",
+        default_exec_timeout_sec=30.0,
+        detect=lambda: _types.SimpleNamespace(
+            installed=True, bin_path="/usr/bin/codex", logged_in=True, detail=""
+        ),
+        build=lambda **kw: _types.SimpleNamespace(
+            argv=("/usr/bin/codex", "exec", "-"),
+            stdin=kw.get("prompt", ""),
+            cwd="/",
+            env=None,
+            timeout_sec=30.0,
+        ),
+        parse=lambda **kw: kw.get("stdout", ""),
+        explain_failure=lambda **kw: f"exit {kw.get('returncode')}",
+    )
+    client = CLIBackedAgentClient(fake_adapter, model=None)
+
+    # Patch CLIBackedLLMClient.invoke to return a known JSON response.
+    import unittest.mock as mock
+
+    from app.services.llm_client import LLMResponse
+
+    json_response = '{"tool_calls": [{"id": "c1", "name": "my_tool", "input": {"x": 1}}]}'
+    with mock.patch(
+        "app.integrations.llm_cli.runner.CLIBackedLLMClient.invoke",
+        return_value=LLMResponse(content=json_response),
+    ):
+        result = client.invoke([{"role": "user", "content": "investigate"}])
+
+    assert result.has_tool_calls
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0].name == "my_tool"
+    assert result.tool_calls[0].input == {"x": 1}
+    assert result.content == ""
+
+
+def test_cli_backed_agent_client_build_assistant_message_includes_tool_json() -> None:
+    """Assistant history must retain tool_calls JSON for multi-turn CLI prompts."""
+    from app.services.agent_llm_client import CLIBackedAgentClient, ToolCall
+
+    msg = CLIBackedAgentClient.build_assistant_message(
+        "",
+        [ToolCall(id="t1", name="query_logs", input={"q": "error"})],
+    )
+    assert msg["role"] == "assistant"
+    assert "query_logs" in msg["content"]
+    assert '"tool_calls"' in msg["content"]
+    assert "t1" in msg["content"]
+
+
+def test_try_parse_tool_call_json_uses_raw_decode_not_greedy_brace_span() -> None:
+    """Trailing brace-containing prose after valid JSON must not drop tool_calls."""
+    from app.services import agent_llm_client as alc
+
+    text = '{"tool_calls": [{"id": "a", "name": "t1", "input": {}}]} Here\'s context: {not json}'
+    parsed = alc._try_parse_tool_call_json(text)
+    assert parsed is not None
+    assert len(parsed["tool_calls"]) == 1
+    assert parsed["tool_calls"][0]["name"] == "t1"
+
+
+def test_cli_backed_agent_client_reuses_single_cli_llm_client() -> None:
+    """CLIBackedLLMClient should be constructed once so probe cache spans invokes."""
+    import types as _types
+    import unittest.mock as mock
+
+    from app.integrations.llm_cli.runner import CLIBackedLLMClient
+    from app.services.agent_llm_client import CLIBackedAgentClient
+    from app.services.llm_client import LLMResponse
+
+    fake_adapter = _types.SimpleNamespace(
+        name="codex",
+        binary_env_key="CODEX_BIN",
+        install_hint="",
+        auth_hint="codex login",
+        default_exec_timeout_sec=30.0,
+        detect=lambda: _types.SimpleNamespace(
+            installed=True, bin_path="/usr/bin/codex", logged_in=True, detail=""
+        ),
+        build=lambda **_kw: _types.SimpleNamespace(
+            argv=("/usr/bin/codex",), stdin="", cwd="/", env=None, timeout_sec=30.0
+        ),
+        parse=lambda **_kw: "",
+        explain_failure=lambda **_kw: "",
+    )
+    real_init = CLIBackedLLMClient.__init__
+    init_count = {"n": 0}
+
+    def counting_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        init_count["n"] += 1
+        return real_init(self, *args, **kwargs)
+
+    with mock.patch.object(CLIBackedLLMClient, "__init__", counting_init):
+        client = CLIBackedAgentClient(fake_adapter, model=None)
+        with mock.patch.object(
+            CLIBackedLLMClient, "invoke", return_value=LLMResponse(content="ok")
+        ):
+            client.invoke([{"role": "user", "content": "a"}])
+            client.invoke([{"role": "user", "content": "b"}])
+
+    assert init_count["n"] == 1
+
+
+def test_cli_backed_agent_client_plain_text_response() -> None:
+    """CLIBackedAgentClient treats non-JSON output as a final text answer."""
+    import types as _types
+    import unittest.mock as mock
+
+    from app.services.agent_llm_client import CLIBackedAgentClient
+    from app.services.llm_client import LLMResponse
+
+    fake_adapter = _types.SimpleNamespace(
+        name="codex",
+        binary_env_key="CODEX_BIN",
+        install_hint="",
+        auth_hint="codex login",
+        default_exec_timeout_sec=30.0,
+        detect=lambda: _types.SimpleNamespace(
+            installed=True, bin_path="/usr/bin/codex", logged_in=True, detail=""
+        ),
+        build=lambda **_kw: _types.SimpleNamespace(
+            argv=("/usr/bin/codex",), stdin="", cwd="/", env=None, timeout_sec=30.0
+        ),
+        parse=lambda **_kw: "",
+        explain_failure=lambda **_kw: "",
+    )
+    client = CLIBackedAgentClient(fake_adapter, model=None)
+
+    with mock.patch(
+        "app.integrations.llm_cli.runner.CLIBackedLLMClient.invoke",
+        return_value=LLMResponse(content="The root cause is a memory leak."),
+    ):
+        result = client.invoke([{"role": "user", "content": "summarise"}])
+
+    assert not result.has_tool_calls
+    assert result.content == "The root cause is a memory leak."
