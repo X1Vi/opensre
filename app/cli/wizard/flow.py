@@ -2180,6 +2180,13 @@ def run_wizard(_argv: list[str] | None = None) -> int:
         probes=probes,
     )
     env_path = sync_provider_env(provider=provider, model=model)
+    os.environ["LLM_PROVIDER"] = provider.value
+    os.environ[provider.model_env] = model
+    if provider.legacy_model_env:
+        os.environ[provider.legacy_model_env] = model
+    from app.services.llm_client import reset_llm_singletons
+
+    reset_llm_singletons()
 
     _step_header(3, 4, "Integrations")
     try:

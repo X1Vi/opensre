@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import questionary
 from rich.console import Console
 
@@ -86,6 +88,11 @@ def run_local_llm_setup() -> int:
     provider = PROVIDER_BY_VALUE["ollama"]
     env_path = sync_provider_env(provider=provider, model=chosen)
     sync_env_values({provider.api_key_env: host})
+    os.environ["LLM_PROVIDER"] = provider.value
+    os.environ[provider.model_env] = chosen
+    from app.services.llm_client import reset_llm_singletons
+
+    reset_llm_singletons()
     store_path = get_store_path()
     save_local_config(
         wizard_mode="quickstart",
