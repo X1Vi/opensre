@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import re
 
+from app.cli.interactive_shell.routing.handle_message_with_agent.errors import (
+    ParseError,
+    PlannerUnavailable,
+    PolicyError,
+)
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.intent_parser import (
     ACTION_PATTERNS,
     INTEGRATION_CAPABILITY_RE,
@@ -34,6 +39,7 @@ from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.s
     SYNTHETIC_UNKNOWN_PREFIX,
     list_rds_postgres_scenarios,
 )
+from app.cli.support.exception_reporting import report_exception
 
 _SYNTHETIC_SCENARIO_ID_RE = re.compile(
     r"\b(?P<scenario>\d{3}-[a-z0-9][a-z0-9-]*)\b",
@@ -217,35 +223,64 @@ def map_actions_with_unhandled(message: str) -> tuple[list[PlannedAction], bool]
     has_unhandled_clause = False
     unmatched_clauses: list[PromptClause] = []
 
-    for clause in split_prompt_clauses(message):
-        clause_actions = map_clause_actions(
-            clause,
-            seen_slash=seen_slash,
+    try:
+        clauses = split_prompt_clauses(message)
+    except Exception as exc:
+        report_exception(
+            exc,
+            context="interactive_shell.routing.mapper.split_prompt_clauses",
+            extra={"degrade_reason_tag": ParseError.reason_tag, "text_length": len(message)},
         )
-        if not clause_actions:
-            has_unhandled_clause = True
-            unmatched_clauses.append(clause)
-        mapped.extend(clause_actions)
+        raise ParseError("Failed to split prompt into clauses for action mapping.") from exc
 
-    has_investigation = any(action.kind == "investigation" for action in mapped)
-    if not has_investigation:
-        text_level_investigation = extract_quoted_investigation_request_text(message)
-        if text_level_investigation is not None:
-            mapped.append(text_level_investigation)
-            has_investigation = True
-
-    if (
-        has_unhandled_clause
-        and has_investigation
-        and all(
-            "investigation" in clause.text.lower()
-            or re.match(r'^\s*send\s+it\s+(?:"|\')', clause.text, re.IGNORECASE) is not None
-            for clause in unmatched_clauses
+    try:
+        for clause in clauses:
+            clause_actions = map_clause_actions(
+                clause,
+                seen_slash=seen_slash,
+            )
+            if not clause_actions:
+                has_unhandled_clause = True
+                unmatched_clauses.append(clause)
+            mapped.extend(clause_actions)
+    except Exception as exc:
+        report_exception(
+            exc,
+            context="interactive_shell.routing.mapper.map_clause_actions",
+            extra={"degrade_reason_tag": PolicyError.reason_tag, "text_length": len(message)},
         )
-    ):
-        has_unhandled_clause = False
+        raise PolicyError("Failed to apply routing policy to one or more prompt clauses.") from exc
 
-    return sorted(mapped, key=lambda action: action.position), has_unhandled_clause
+    try:
+        has_investigation = any(action.kind == "investigation" for action in mapped)
+        if not has_investigation:
+            text_level_investigation = extract_quoted_investigation_request_text(message)
+            if text_level_investigation is not None:
+                mapped.append(text_level_investigation)
+                has_investigation = True
+
+        if (
+            has_unhandled_clause
+            and has_investigation
+            and all(
+                "investigation" in clause.text.lower()
+                or re.match(r'^\s*send\s+it\s+(?:"|\')', clause.text, re.IGNORECASE) is not None
+                for clause in unmatched_clauses
+            )
+        ):
+            has_unhandled_clause = False
+
+        return sorted(mapped, key=lambda action: action.position), has_unhandled_clause
+    except Exception as exc:
+        report_exception(
+            exc,
+            context="interactive_shell.routing.mapper.finalize",
+            extra={
+                "degrade_reason_tag": PlannerUnavailable.reason_tag,
+                "text_length": len(message),
+            },
+        )
+        raise PlannerUnavailable("Routing planner became unavailable during finalization.") from exc
 
 
 def map_actions(message: str) -> list[PlannedAction]:
@@ -265,44 +300,10 @@ def map_terminal_tasks(message: str) -> list[str]:
     return [action.kind for action in map_actions(message)]
 
 
-def plan_clause_actions(
-    clause: PromptClause,
-    *,
-    seen_slash: set[str],
-) -> list[PlannedAction]:
-    """Backward-compatible alias for ``map_clause_actions``."""
-    return map_clause_actions(clause, seen_slash=seen_slash)
-
-
-def plan_actions_with_unhandled(message: str) -> tuple[list[PlannedAction], bool]:
-    """Backward-compatible alias for ``map_actions_with_unhandled``."""
-    return map_actions_with_unhandled(message)
-
-
-def plan_actions(message: str) -> list[PlannedAction]:
-    """Backward-compatible alias for ``map_actions``."""
-    return map_actions(message)
-
-
-def plan_cli_actions(message: str) -> list[str]:
-    """Backward-compatible alias for ``map_cli_actions``."""
-    return map_cli_actions(message)
-
-
-def plan_terminal_tasks(message: str) -> list[str]:
-    """Backward-compatible alias for ``map_terminal_tasks``."""
-    return map_terminal_tasks(message)
-
-
 __all__ = [
     "map_actions",
     "map_actions_with_unhandled",
     "map_clause_actions",
     "map_cli_actions",
     "map_terminal_tasks",
-    "plan_actions",
-    "plan_actions_with_unhandled",
-    "plan_clause_actions",
-    "plan_cli_actions",
-    "plan_terminal_tasks",
 ]

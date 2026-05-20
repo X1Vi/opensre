@@ -64,7 +64,7 @@ def _llm_planner_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
         *,
         session: ReplSession | None = None,  # noqa: ARG001
     ) -> tuple[list[PlannedAction], bool]:
-        return action_planner_module.plan_actions_with_unhandled(message)
+        return action_planner_module.map_actions_with_unhandled(message)
 
     monkeypatch.setattr(agent_actions, "plan_actions_with_llm", _deterministic_planner)
 

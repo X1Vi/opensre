@@ -134,7 +134,7 @@ def _coerce_incident_paste_handoff(
             position=0,
             source="llm",
         )
-    ], True
+    ], False
 
 
 def _finalize_planner_result(

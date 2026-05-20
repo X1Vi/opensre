@@ -281,8 +281,8 @@
   input: "please connect to local llama"
   expected_route_kind: "cli_agent"
   expected_planned_actions:
-    - kind: "llm_provider"
-      content: "ollama"
+    - kind: "assistant_handoff"
+      content: "provider:local_llama_connect"
   expected_executed_actions: []
   expected_terminal_response_contains:
     - "ollama"
