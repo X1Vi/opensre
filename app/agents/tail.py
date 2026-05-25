@@ -192,7 +192,7 @@ def _resolve_macos_target(pid: int) -> _ResolvedTarget:
     return _ResolvedTarget(pid=pid, path=_check_regular_file(Path(fd_name), what="stdout"))
 
 
-def _resolve_target(pid: int) -> _ResolvedTarget:
+def resolve_target(pid: int) -> _ResolvedTarget:
     if sys.platform == "win32":
         raise AttachUnsupported("Windows is not supported")
     # Guard non-positive ids before probing: ``psutil.pid_exists(0)`` can
@@ -427,7 +427,7 @@ def attach(
     vanished, open failed). Caller is responsible for closing the
     session — preferably via ``with attach(pid) as sess: …``.
     """
-    target = _resolve_target(pid)
+    target = resolve_target(pid)
     return AttachSession(
         target,
         buffer_bytes=buffer_bytes,
@@ -446,4 +446,5 @@ __all__ = [
     "AttachUnsupported",
     "TailBuffer",
     "attach",
+    "resolve_target",
 ]

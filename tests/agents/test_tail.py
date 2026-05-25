@@ -33,9 +33,9 @@ from app.agents.tail import (
     _parse_lsof_fd1,
     _resolve_linux_target,
     _resolve_macos_target,
-    _resolve_target,
     _ResolvedTarget,
     attach,
+    resolve_target,
 )
 
 
@@ -341,20 +341,20 @@ class TestResolveTargetDispatch:
     def test_windows_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(tail_mod.sys, "platform", "win32")
         with pytest.raises(AttachUnsupported, match="Windows"):
-            _resolve_target(1234)
+            resolve_target(1234)
 
     def test_no_such_pid_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # platform is not "win32" so we hit the pid_exists check
         monkeypatch.setattr(tail_mod.sys, "platform", "linux")
         monkeypatch.setattr(tail_mod, "pid_exists", lambda _pid: False)
         with pytest.raises(AttachUnsupported, match="no such pid"):
-            _resolve_target(99_999_999)
+            resolve_target(99_999_999)
 
     def test_unknown_platform_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(tail_mod.sys, "platform", "freebsd13")
         monkeypatch.setattr(tail_mod, "pid_exists", lambda _pid: True)
         with pytest.raises(AttachUnsupported, match="freebsd13"):
-            _resolve_target(1234)
+            resolve_target(1234)
 
     @pytest.mark.parametrize("invalid_pid", [0, -1, -99])
     def test_non_positive_pid_rejected_before_pid_exists(
@@ -363,7 +363,7 @@ class TestResolveTargetDispatch:
         # Regression guard: ``psutil.pid_exists(0)`` can raise
         # ``PermissionError`` on macOS. The slash handler only catches
         # ``AttachUnsupported``, so an unguarded probe would crash the
-        # REPL. ``_resolve_target`` must reject non-positive ids before
+        # REPL. ``resolve_target`` must reject non-positive ids before
         # touching ``pid_exists`` at all.
         def _boom(_pid: int) -> bool:
             raise PermissionError(1, "operation not permitted")
@@ -371,7 +371,7 @@ class TestResolveTargetDispatch:
         monkeypatch.setattr(tail_mod.sys, "platform", "darwin")
         monkeypatch.setattr(tail_mod, "pid_exists", _boom)
         with pytest.raises(AttachUnsupported, match="must be positive"):
-            _resolve_target(invalid_pid)
+            resolve_target(invalid_pid)
 
 
 class TestAttachEagerValidation:
@@ -384,7 +384,7 @@ class TestAttachEagerValidation:
         def _fail(_pid: int) -> _ResolvedTarget:
             raise AttachUnsupported("planned failure")
 
-        monkeypatch.setattr(tail_mod, "_resolve_target", _fail)
+        monkeypatch.setattr(tail_mod, "resolve_target", _fail)
         with pytest.raises(AttachUnsupported, match="planned failure"):
             attach(1234)
 
@@ -549,7 +549,7 @@ class TestAttachIntegration:
         log.write_text("")
         with patch.object(
             tail_mod,
-            "_resolve_target",
+            "resolve_target",
             return_value=_ResolvedTarget(pid=os.getpid(), path=log),
         ):
             sess = attach(os.getpid(), poll_interval_s=0.01)

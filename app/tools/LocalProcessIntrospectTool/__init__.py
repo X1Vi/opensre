@@ -7,12 +7,13 @@ local agents from the OpenSRE interactive shell.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC
 from typing import Any
 
 from app.agents.error_signals import ErrorSignals
 from app.agents.probe import ProcessSnapshot, probe
-from app.agents.tail import AttachUnsupported, TailBuffer, _resolve_target
+from app.agents.tail import DEFAULT_MAX_BYTES, AttachUnsupported, resolve_target
 from app.tools.tool_decorator import tool
 
 
@@ -37,17 +38,18 @@ def _read_stdout_tail(pid: int, max_lines: int = 50) -> str | None:
     or we lack permission — the planner treats ``None`` as "unavailable".
     """
     try:
-        target = _resolve_target(pid)
+        target = resolve_target(pid)
     except (AttachUnsupported, OSError):
         return None
     try:
         with open(target.path, "rb") as f:
+            offset = max(0, os.fstat(f.fileno()).st_size - DEFAULT_MAX_BYTES)
+            if offset > 0:
+                f.seek(offset)
             data = f.read()
     except (OSError, PermissionError, FileNotFoundError):
         return None
-    buf = TailBuffer()
-    buf.append(data)
-    lines = buf.decoded().splitlines()
+    lines = data.decode("utf-8", errors="replace").splitlines()
     return "\n".join(lines[-max_lines:])
 
 

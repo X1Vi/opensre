@@ -102,7 +102,7 @@ def test_read_stdout_tail_returns_last_50_lines(tmp_path) -> None:
     fake_pid = 9999
 
     with patch(
-        "app.tools.LocalProcessIntrospectTool._resolve_target",
+        "app.tools.LocalProcessIntrospectTool.resolve_target",
         return_value=FakeTarget(fake_pid, log),
     ):
         tail = _read_stdout_tail(fake_pid, max_lines=50)
@@ -118,7 +118,7 @@ def test_read_stdout_tail_returns_none_for_resolve_failure() -> None:
     from app.tools.LocalProcessIntrospectTool import _read_stdout_tail
 
     with patch(
-        "app.tools.LocalProcessIntrospectTool._resolve_target",
+        "app.tools.LocalProcessIntrospectTool.resolve_target",
         side_effect=AttachUnsupported("no such pid"),
     ):
         result = _read_stdout_tail(9999)
