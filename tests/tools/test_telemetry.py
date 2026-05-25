@@ -918,6 +918,7 @@ _TOOLS_WITHOUT_DELIBERATE_CATCH: frozenset[str] = frozenset(
         "jira_create_issue",
         "jira_issue_detail",
         "jira_search_issues",
+        "local_process_introspect",
         "list_bitbucket_commits",
         "list_github_commits",
         "list_gitlab_commits",
