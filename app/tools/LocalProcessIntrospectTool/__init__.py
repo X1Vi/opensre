@@ -82,20 +82,20 @@ def _read_stdout_tail(pid: int, max_lines: int = 50) -> str | None:
     outputs={
         "snapshot": "psutil ProcessSnapshot dict, or null if the PID is inaccessible",
         "stdout_tail": "last 50 stdout lines as a string, or null if stdout cannot be read",
-        "error_signals": "error/retry rates per category from recent stdout",
+        "error_counts": "error/retry counts per category from recent stdout",
     },
     surfaces=("investigation",),
 )
 def local_process_introspect(pid: int) -> dict[str, Any]:
     snapshot = probe(pid)
     stdout_tail = _read_stdout_tail(pid)
-    error_signals: dict[str, float] = {}
+    error_counts: dict[str, float] = {}
     if stdout_tail:
         signals = ErrorSignals()
         signals.observe(stdout_tail)
-        error_signals = signals.rate_per_minute()
+        error_counts = signals.rate_per_minute()
     return {
         "snapshot": _snapshot_to_dict(snapshot) if snapshot else None,
         "stdout_tail": stdout_tail,
-        "error_signals": error_signals,
+        "error_counts": error_counts,
     }

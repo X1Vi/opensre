@@ -107,7 +107,8 @@
               "opsgenie",
               "sentry",
               "signoz",
-              "splunk"
+              "splunk",
+              "local_process_introspect"
             ]
           },
           {

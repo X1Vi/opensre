@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.agents.probe import ProcessSnapshot
-from app.agents.tail import AttachUnsupported
+from app.agents.tail import DEFAULT_MAX_BYTES, AttachUnsupported
 from app.tools.LocalProcessIntrospectTool import local_process_introspect
 from tests.tools.conftest import BaseToolContract
 
@@ -125,6 +125,31 @@ def test_read_stdout_tail_returns_none_for_resolve_failure() -> None:
     assert result is None
 
 
+def test_read_stdout_tail_bounded_read_large_file(tmp_path) -> None:
+    from app.tools.LocalProcessIntrospectTool import _read_stdout_tail
+
+    log = tmp_path / "large_stdout.log"
+    padding = b"x" * (DEFAULT_MAX_BYTES + 1024)
+    marker_lines = "\n".join(f"marker_line_{i}" for i in range(60))
+    with open(log, "wb") as f:
+        f.write(padding)
+        f.write(b"\n")
+        f.write(marker_lines.encode())
+    fake_pid = 9999
+
+    with patch(
+        "app.tools.LocalProcessIntrospectTool.resolve_target",
+        return_value=FakeTarget(fake_pid, log),
+    ):
+        tail = _read_stdout_tail(fake_pid, max_lines=50)
+
+    assert tail is not None
+    lines = tail.splitlines()
+    assert len(lines) == 50
+    assert lines[0] == "marker_line_10"
+    assert lines[-1] == "marker_line_59"
+
+
 def test_run_returns_error_signals() -> None:
     mock_snapshot = ProcessSnapshot(
         pid=1234,
@@ -148,9 +173,9 @@ def test_run_returns_error_signals() -> None:
     ):
         result = local_process_introspect(pid=1234)
 
-    assert "error_signals" in result
-    assert isinstance(result["error_signals"], dict)
-    assert result["error_signals"].get("traceback", 0) > 0
+    assert "error_counts" in result
+    assert isinstance(result["error_counts"], dict)
+    assert result["error_counts"].get("traceback", 0) > 0
 
 
 def test_run_error_signals_empty_when_no_stdout() -> None:
@@ -172,4 +197,4 @@ def test_run_error_signals_empty_when_no_stdout() -> None:
     ):
         result = local_process_introspect(pid=1234)
 
-    assert result["error_signals"] == {}
+    assert result["error_counts"] == {}
