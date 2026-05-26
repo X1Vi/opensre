@@ -292,6 +292,43 @@ is required so a stray keypress doesn't abort an in-flight response.
   buggy or hostile agents can emit control sequences affecting the viewer.
   Only trace processes you trust; there is no sandboxing step.
 
+## `local_process_introspect` — point-in-time process health check
+
+The `local_process_introspect` tool is used by the investigation planner to
+diagnose local agent health during incident response. It returns a process
+resource snapshot (CPU, memory, file descriptors, connections, status, start
+time) and the last 50 lines of stdout for a given PID.
+
+Internally it reuses the same machinery as `/agents trace`:
+`resolve_target` for stdout resolution, `probe` for the psutil snapshot, and
+`ErrorSignals` to classify error/retry patterns from recent output.
+
+### When the planner calls it
+
+- Diagnosing a stuck or high-CPU local agent during incident investigation
+- Checking whether a process is alive and making forward progress
+- Reading recent stdout output from a local process
+- Verifying resource usage of a monitored agent
+
+### Output fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `snapshot` | `dict` or `null` | psutil process snapshot: `pid`, `cpu_percent`, `rss_mb`, `num_fds`, `num_connections`, `status`, `started_at` |
+| `stdout_tail` | `str` or `null` | Last 50 lines of stdout; `null` when unavailable (dead PID, pipe/socket/tty, or permission denied) |
+| `error_counts` | `dict[str, float]` | Error/retry counts per category (`traceback`, `rate_limit`, `http_5xx`, `tool_failure`) from recent stdout |
+
+### Example
+
+```python
+local_process_introspect(pid=1234)
+# {
+#   "snapshot": {"pid": 1234, "cpu_percent": 4.2, "rss_mb": 256.0, ...},
+#   "stdout_tail": "line 50\nline 51\n...\nline 99",
+#   "error_counts": {"traceback": 2, "rate_limit": 1, "http_5xx": 0, "tool_failure": 0}
+# }
+```
+
 ## `/agents bus` — shared context channel
 
 The bus is an opt-in, local-only pub/sub channel that carries findings between
